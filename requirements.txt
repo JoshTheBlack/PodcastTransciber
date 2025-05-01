@@ -1,0 +1,4 @@
+# requirements.txt
+openai-whisper
+feedparser
+requests
