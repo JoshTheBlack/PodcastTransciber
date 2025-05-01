@@ -166,7 +166,7 @@ def format_timestamp(seconds: float) -> str:
 def transcribe_audio(model, audio_path, output_txt_path):
     """
     Transcribes an audio file using Whisper, formats with timestamps per segment,
-    and saves to a text file.
+    and saves to a text file. 
     """
     try:
         logging.info(f"Starting transcription for: {audio_path} using model '{WHISPER_MODEL}'")
