@@ -145,13 +145,23 @@ Unraid uses Docker through its web UI.
 
 ## Output Structure
 Files will be saved within the directory you mapped to `/out` on your host system:
+
 <your_host_output_directory>/
+
 ├── .processed_episodes.log   # State file tracking processed episodes
+
 ├── mp3/                      # Directory for original audio files
+
 │   └── episode_title_1.mp3
+
 │   └── episode_title_2.mp3
+
 │   └── ...
+
 └── transcripts/              # Directory for transcription text files
+
     └── episode_title_1.txt
+
     └── episode_title_2.txt
+
     └── ...
