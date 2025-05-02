@@ -1,4 +1,4 @@
 # requirements.txt
-openai-whisper
+faster-whisper
 feedparser
 requests
