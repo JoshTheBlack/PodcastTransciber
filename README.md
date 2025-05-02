@@ -121,18 +121,20 @@ Unraid uses Docker through its web UI.
 1.  **Go to Docker Tab:** Navigate to the "Docker" tab in your Unraid web UI.
 2.  **Add Container:** Scroll to the bottom and click "Add Container".
 3.  **Fill Basic Settings:**
+   
     * **Name:** Give it a name (e.g., `Podcast-Transcriber`).
+    
     * **Repository:** Enter `joshtheblack/podcast-transcriber:latest`.
     * **Network Type:** `Bridge` is usually fine.
     * **Restart Policy:** Set this to `Unless Stopped`.
-4. *Add Volume Mapping:**
+5. *Add Volume Mapping:**
     * Click "Add another Path, Port, Variable, Label or Device".
     * **Config Type:** `Path`
     * **Name:** `Output Files` (or similar)
     * **Container Path:** `/out`
     * **Host Path:** Choose a path on your Unraid server where you want the transcripts and MP3s stored. Example: `/mnt/user/appdata/podcast-transcriber/output/` (Make sure the `appdata/podcast-transcriber` part exists or adjust as needed).
     * **Access Mode:** `Read/Write`
-5.  **Add Environment Variables:**
+6.  **Add Environment Variables:**
     * Click "Add another Path, Port, Variable, Label or Device" repeatedly for each variable you need to set.
     * **Config Type:** `Variable`
     * **Required:**
@@ -144,8 +146,8 @@ Unraid uses Docker through its web UI.
         * **Name:** `Check Interval` | **Key:** `CHECK_INTERVAL_SECONDS` | **Value:** `3600`
         * **Name:** `Lookback Days` | **Key:** `LOOKBACK_DAYS` | **Value:** `7`
         * **Name:** `Debug Logging` | **Key:** `DEBUG_LOGGING` | **Value:** `false` (or `true`)
-6.  **Apply and Start:** Click "Apply" at the bottom of the page. Unraid will pull the image and start the container.
-7.  **Check Logs:** You can check the container's logs by clicking its icon on the Docker tab and selecting "Logs".
+7.  **Apply and Start:** Click "Apply" at the bottom of the page. Unraid will pull the image and start the container.
+8.  **Check Logs:** You can check the container's logs by clicking its icon on the Docker tab and selecting "Logs".
   
 ## Output Structure
 Files will be saved within the directory you mapped to `/out` on your host system:
