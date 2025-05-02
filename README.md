@@ -125,29 +125,51 @@ Unraid uses Docker through its web UI.
     * **Name:** Give it a name (e.g., `Podcast-Transcriber`).
     
     * **Repository:** Enter `joshtheblack/podcast-transcriber:latest`.
+    
     * **Network Type:** `Bridge` is usually fine.
+
     * **Restart Policy:** Set this to `Unless Stopped`.
-5. *Add Volume Mapping:**
+    
+5. **Add Volume Mapping:**
+   
     * Click "Add another Path, Port, Variable, Label or Device".
+    
     * **Config Type:** `Path`
+    
     * **Name:** `Output Files` (or similar)
+    
     * **Container Path:** `/out`
+    
     * **Host Path:** Choose a path on your Unraid server where you want the transcripts and MP3s stored. Example: `/mnt/user/appdata/podcast-transcriber/output/` (Make sure the `appdata/podcast-transcriber` part exists or adjust as needed).
+    
     * **Access Mode:** `Read/Write`
-6.  **Add Environment Variables:**
+    
+7.  **Add Environment Variables:**
+   
     * Click "Add another Path, Port, Variable, Label or Device" repeatedly for each variable you need to set.
+    
     * **Config Type:** `Variable`
+    
     * **Required:**
+    
         * **Name:** `PODCAST_FEEDS` | **Key:** `PODCAST_FEEDS` | **Value:** `YOUR_FEED_URL_1;YOUR_FEED_URL_2` (Enter your feeds)
+        
     * **Recommended:**
+    
         * **Name:** `Timezone` | **Key:** `TZ` | **Value:** `America/New_York` (Enter your timezone)
+        
     * **Optional (Add as needed):**
+    
         * **Name:** `Whisper Model` | **Key:** `WHISPER_MODEL` | **Value:** `base` (or `small`, etc.)
+        
         * **Name:** `Check Interval` | **Key:** `CHECK_INTERVAL_SECONDS` | **Value:** `3600`
+        
         * **Name:** `Lookback Days` | **Key:** `LOOKBACK_DAYS` | **Value:** `7`
+        
         * **Name:** `Debug Logging` | **Key:** `DEBUG_LOGGING` | **Value:** `false` (or `true`)
-7.  **Apply and Start:** Click "Apply" at the bottom of the page. Unraid will pull the image and start the container.
-8.  **Check Logs:** You can check the container's logs by clicking its icon on the Docker tab and selecting "Logs".
+        
+9.  **Apply and Start:** Click "Apply" at the bottom of the page. Unraid will pull the image and start the container.
+10.  **Check Logs:** You can check the container's logs by clicking its icon on the Docker tab and selecting "Logs".
   
 ## Output Structure
 Files will be saved within the directory you mapped to `/out` on your host system:
