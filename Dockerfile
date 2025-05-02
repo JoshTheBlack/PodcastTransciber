@@ -5,53 +5,100 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install system dependencies:
-# ffmpeg: Still needed for robust audio decoding by the script before passing to whisper
-# git: Might be needed by pip for installing certain dependencies
-# ca-certificates: Good practice for HTTPS requests (feeds, downloads)
-# CTranslate2 (faster-whisper's engine) might benefit from CPU features like AVX/AVX2
+# ffmpeg: For audio decoding
+# git: May be needed by pip
+# ca-certificates: For HTTPS
+# gosu: For changing user in entrypoint script
+# curl & gpg: Needed temporarily to install gosu securely
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     git \
     ca-certificates \
-    && apt-get clean \
+    curl \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container at /app
-COPY requirements.txt .
+# --- Install gosu ---
+ENV GOSU_VERSION=1.17
+RUN set -eux; \
+    #క్క Fetch gosu binary for amd64 architecture
+    dpkgArch="$(dpkg --print-architecture)"; \
+    if [ "$dpkgArch" = "amd64" ]; then \
+        curl -sSL -o /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64"; \
+        curl -sSL -o /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64.asc"; \
+    else \
+        # Add other architectures here if needed (e.g., arm64)
+        echo >&2 "Unsupported architecture: $dpkgArch for gosu download"; \
+        exit 1; \
+    fi; \
+    \
+    #క్క Verify the signature
+    export GNUPGHOME="$(mktemp -d)"; \
+    # Obtain the signing key (Tianon Gravi's key, used for gosu releases)
+    gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4; \
+    gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu; \
+    gpgconf --kill all; \
+    rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc; \
+    \
+    #క్క Make executable and cleanup
+    chmod +x /usr/local/bin/gosu; \
+    gosu --version; \
+    apt-get purge -y --auto-remove curl gpg; \
+    rm -rf /var/lib/apt/lists/*
+# --- End gosu install ---
 
-# Install any needed packages specified in requirements.txt
-# Using --no-cache-dir reduces image size
-# Note: This will install faster-whisper and its dependencies like ctranslate2, transformers
+# --- Create default non-root user and group ---
+ENV APP_USER=appuser
+ENV APP_GROUP=appgroup
+ENV DEFAULT_UID=1000
+ENV DEFAULT_GID=1000
+RUN groupadd -g ${DEFAULT_GID} ${APP_GROUP} \
+    && useradd -u ${DEFAULT_UID} -g ${APP_GROUP} -m -s /bin/bash ${APP_USER}
+# --- End user creation ---
+
+# Copy requirements first for layer caching
+COPY requirements.txt .
+# Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the Python script into the container at /app
+# Copy the rest of the application code
 COPY monitor.py .
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Create the output directories (script will ensure they exist too)
-RUN mkdir -p /out/transcripts /out/mp3
+# Make entrypoint executable and set permissions
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && chown -R ${APP_USER}:${APP_GROUP} /app # Set /app ownership during build
+
+# Create output directories and set permissions
+RUN mkdir -p /out/transcripts /out/mp3 \
+    && chown -R ${APP_USER}:${APP_GROUP} /out
 
 # --- Environment Variables ---
 # Mandatory
 ENV PODCAST_FEEDS=""
 
 # Optional - Faster-Whisper Specific
-# Options: tiny, base, small, medium, large, large-v2, large-v3, or path to converted model
-ENV WHISPER_MODEL="base"  
-# Device: "cpu", "cuda"  
+ENV WHISPER_MODEL="base"
 ENV DEVICE="cpu"
-# Compute type: "default", "int8", "int8_float16", "int16", "float16", "float32" (see faster-whisper docs)            
-ENV COMPUTE_TYPE="default"  
+ENV COMPUTE_TYPE="default"
 
 # Optional - Script Behavior
 ENV CHECK_INTERVAL_SECONDS=3600
 ENV LOOKBACK_DAYS=7
-# Controls Python logging level (INFO vs DEBUG)
-ENV DEBUG_LOGGING="false"   
-# Set Timezone, e.g., America/New_York
-ENV TZ="UTC"                
+ENV DEBUG_LOGGING="false"
+ENV TZ="UTC"
 
-# Force python stdout/stderr streams to be unbuffered
+# --- NEW: PUID/PGID for User Mapping ---
+ENV PUID=1000
+ENV PGID=1000
+# --- End PUID/PGID ---
+
 ENV PYTHONUNBUFFERED=1
 
-# Define the command to run the Python script when the container starts
+# Set the entrypoint script
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Default command (passed to entrypoint)
 CMD ["python", "monitor.py"]
+
+# Note: We don't use USER instruction here; entrypoint handles user switching via gosu

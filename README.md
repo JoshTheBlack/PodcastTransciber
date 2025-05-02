@@ -35,6 +35,8 @@ Configure the container using environment variables:
 | :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------- | :------- | :---------------------------------------------------------------- |
 | `PODCAST_FEEDS`          | Semicolon-separated (`;`) list of podcast RSS feed URLs.                                                                                                            | `""`       | **Yes** | `https://url1.com/feed.xml;https://url2.com/rss`                  |
 | `TZ`                     | Set the container's timezone (use standard tz database names). Important for accurate lookback period calculations and logs.                                          | `UTC`      | No       | `America/New_York`                                                |
+| `PUID`    | Set the user ID the container runs as | `99` | No | `99`  |
+| `PGID`    | Set the user ID the container runs as | `100` | No | `100`  |
 | `WHISPER_MODEL`          | The faster-whisper model to use (e.g., `tiny`, `base`, `small`, `medium`, `large-v2`, `large-v3`, `distil-large-v2`). See faster-whisper docs for more options. | `base`     | No       | `small` or `large-v3`                                             |
 | `DEVICE`                 | Device to run inference on (`cpu`, `cuda`). Using `cuda` requires host NVIDIA drivers & NVIDIA Container Toolkit setup.                                             | `cpu`      | No       | `cuda`                                                            |
 | `COMPUTE_TYPE`           | Data type/quantization for computation (e.g., `default`, `float32`, `float16`, `int8`, `int8_float16`). See faster-whisper docs for compatibility/tradeoffs.         | `default`  | No       | `float16` (GPU), `int8` (GPU/CPU)                             |
@@ -71,6 +73,8 @@ docker run -d \
   -v "$(pwd)/output:/out" \
   -e PODCAST_FEEDS="YOUR_FEED_URL_1;YOUR_FEED_URL_2" \
   -e TZ="America/New_York" \
+  -e PUID=99 \
+  -e PGID=100 \
   -e WHISPER_MODEL="base" \
   -e DEVICE="cpu" \
   -e COMPUTE_TYPE="default" \
@@ -88,6 +92,8 @@ docker run -d \
   -v "$(pwd)/output:/out" \
   -e PODCAST_FEEDS="YOUR_FEED_URL_1;YOUR_FEED_URL_2" \
   -e TZ="America/New_York" \
+  -e PUID=99 \
+  -e PGID=100 \
   -e WHISPER_MODEL="base" \
   -e DEVICE="cuda" \
   -e COMPUTE_TYPE="float16" \
@@ -121,6 +127,8 @@ services:
       - PODCAST_FEEDS=YOUR_FEED_URL_1;YOUR_FEED_URL_2
       # --- Recommended ---
       - TZ=America/New_York
+      - PUID=99
+      - PGID=100
       # --- Optional ---
       - WHISPER_MODEL=base
       - DEVICE=cpu         # Change to "cuda" for GPU
@@ -177,6 +185,8 @@ Unraid uses Docker through its web UI.
         * **Name:** `PODCAST_FEEDS` | **Key:** `PODCAST_FEEDS` | **Value:** `YOUR_FEED_URL_1;...` (Enter your feeds)
     * **Recommended:**
         * **Name:** `Timezone` | **Key:** `TZ` | **Value:** `America/New_York` (Your timezone)
+        * **Name:** `User ID`  | **Key:** `PUID`    | **Value** `99`
+        * **Name:** `Group ID`  | **Key:** `PGID`    | **Value** `100`
     * **Optional:**
         * **Name:** `Whisper Model` | **Key:** `WHISPER_MODEL` | **Value:** `base` (or `small`, `medium`, `large-v3`...)
         * **Name:** `Device` | **Key:** `DEVICE` | **Value:** `cpu` (or `cuda` if GPU configured on host)
