@@ -35,15 +35,20 @@ RUN mkdir -p /out/transcripts /out/mp3
 ENV PODCAST_FEEDS=""
 
 # Optional - Faster-Whisper Specific
-ENV WHISPER_MODEL="base"    # Options: tiny, base, small, medium, large, large-v2, large-v3, or path to converted model
-ENV DEVICE="cpu"            # Device: "cpu", "cuda"
-ENV COMPUTE_TYPE="default"  # Compute type: "default", "int8", "int8_float16", "int16", "float16", "float32" (see faster-whisper docs)
+# Options: tiny, base, small, medium, large, large-v2, large-v3, or path to converted model
+ENV WHISPER_MODEL="base"  
+# Device: "cpu", "cuda"  
+ENV DEVICE="cpu"
+# Compute type: "default", "int8", "int8_float16", "int16", "float16", "float32" (see faster-whisper docs)            
+ENV COMPUTE_TYPE="default"  
 
 # Optional - Script Behavior
 ENV CHECK_INTERVAL_SECONDS=3600
 ENV LOOKBACK_DAYS=7
-ENV DEBUG_LOGGING="false"   # Controls Python logging level (INFO vs DEBUG)
-ENV TZ="UTC"                # Set Timezone, e.g., America/New_York
+# Controls Python logging level (INFO vs DEBUG)
+ENV DEBUG_LOGGING="false"   
+# Set Timezone, e.g., America/New_York
+ENV TZ="UTC"                
 
 # Force python stdout/stderr streams to be unbuffered
 ENV PYTHONUNBUFFERED=1
