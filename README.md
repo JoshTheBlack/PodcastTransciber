@@ -4,7 +4,7 @@
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/joshtheblack/podcast-transcriber.svg)](https://hub.docker.com/r/joshtheblack/podcast-transcriber)
 
-[![GitHub Actions Workflow Status](https://github.com/YOUR_GITHUB_USERNAME/YOUR_GITHUB_REPO/actions/workflows/docker-build-push.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/YOUR_GITHUB_REPO/actions/workflows/docker-build-push.yml) This Docker container continuously monitors one or more podcast RSS feeds for new episodes. When a new episode is detected within a configurable lookback period (default 7 days), it downloads the audio file (MP3), transcribes it using OpenAI's Whisper model, and saves the output.
+[![GitHub Actions Workflow Status](https://github.com/JoshTheBlack/PodcastTranscriber/actions/workflows/docker-build-push.yml/badge.svg)](https://github.com/JoshTheBlack/PodcastTranscriber/actions/workflows/docker-build-push.yml) This Docker container continuously monitors one or more podcast RSS feeds for new episodes. When a new episode is detected within a configurable lookback period (default 7 days), it downloads the audio file (MP3), transcribes it using OpenAI's Whisper model, and saves the output.
 
   
 
