@@ -1,31 +1,37 @@
 # Podcast Transcriber using faster-whisper
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/joshtheblack/podcast-transcriber.svg)](https://hub.docker.com/r/joshtheblack/podcast-transcriber)
-[![GitHub Actions Workflow Status](https://github.com/JoshTheBlack/PodcastTransciber/actions/workflows/docker-build-push.yml/badge.svg)](https://github.com/JoshTheBlack/PodcastTransciber/actions/workflows/docker-build-push.yml) This Docker container continuously monitors one or more podcast RSS feeds for new episodes. When a new episode is detected within a configurable lookback period (default 7 days), it downloads the audio file (MP3), transcribes it using `faster-whisper` (a CTranslate2 reimplementation of Whisper) for faster and more memory-efficient transcription, and saves the output.
+[![GitHub Actions Workflow Status](https://github.com/JoshTheBlack/PodcastTransciber/actions/workflows/docker-build-push.yml/badge.svg)](https://github.com/JoshTheBlack/PodcastTransciber/actions/workflows/docker-build-push.yml)
+
+This Docker container continuously monitors one or more podcast RSS feeds for new episodes. When a new episode is detected within a configurable lookback period (default 7 days), it downloads the audio file (MP3), transcribes it using `faster-whisper` (a CTranslate2 reimplementation of Whisper) for faster and more memory-efficient transcription, and saves the output.
 
 ## Features
 
 * **Continuous Monitoring:** Runs indefinitely, checking feeds periodically.
 * **Efficient Whisper Transcription:** Utilizes `faster-whisper` for improved speed and lower memory usage.
 * **Configurable Feeds:** Monitor multiple podcast feeds.
-* **Selectable Whisper Model:** Choose model size based on accuracy/resource needs (e.g., `tiny`, `base`, `small`, `medium`, `large-v3`, distilled models).
-* **Configurable Lookback:** Only processes recently published episodes on startup or after downtime.
-* **Organized Output:** Saves transcripts (`.txt`) and audio files (`.mp3`) to separate subdirectories.
-* **State Tracking:** Remembers processed episodes to avoid redundant work.
-* **CPU/GPU Support:** Choose device (`cpu` or `cuda`) for inference.
-* **Compute Type Selection:** Optimize for speed/memory using different compute types (precision).
-* **Debug Logging:** Optional detailed logging for troubleshooting.
+* **Selectable Whisper Model:** Choose model size based on accuracy/resource needs.
+* **Configurable Lookback:** Only processes recently published episodes.
+* **Organized Output:** Saves transcripts and optionally audio files.
+* **State Tracking:** Remembers processed episodes.
+* **CPU/GPU Support:** Choose device (`cpu` or `cuda`).
+* **Compute Type Selection:** Optimize for speed/memory.
+* **Debug Logging:** Optional detailed logging.
+* **Conditional MP3 Retention:** Choose to keep MP3 files after transcription (default is to delete).
+* **Discord Webhook Notifications:** Optionally send transcripts to Discord.
 
 ## Prerequisites
 
-* Docker installed on your system (or Unraid server).
-* For GPU acceleration (`DEVICE="cuda"`): NVIDIA GPU, compatible NVIDIA drivers, and NVIDIA Container Toolkit configured with Docker. (The image itself does not bundle the CUDA toolkit).
+* Docker installed.
+* For GPU acceleration: NVIDIA GPU, drivers, and NVIDIA Container Toolkit.
 
 ## Installation
 
 Pull the pre-built image directly from Docker Hub:
 
+```bash
 docker pull joshtheblack/podcast-transcriber:latest
+```
 
 ## Configuration
 
@@ -43,6 +49,8 @@ Configure the container using environment variables:
 | `CHECK_INTERVAL_SECONDS` | How often (in seconds) to check the feeds for new episodes.                                                                                                         | `3600`     | No       | `1800` (30 minutes)                                               |
 | `LOOKBACK_DAYS`          | How many days back to check for unprocessed episodes when starting or checking feeds.                                                                               | `7`        | No       | `14`                                                              |
 | `DEBUG_LOGGING`          | Set to `true` for detailed script DEBUG logs. Note: faster-whisper itself doesn't have verbose transcription output like openai-whisper.                           | `false`    | No       | `true`                                                            |
+| `KEEP_MP3`          | Set to `true` to keep MP3 files after transcription. If false or not set, MP3s are deleted.                          | `false`    | No       | `true`                                                            |
+| `DISCORD_WEBHOOK_URL`          | Discord webhook URL for transcript notifications.                          | `""`    | No       | `https://discord.com/api/webhooks/your_id/your_token`                                                            |
 
 **Note on Models, Devices, and Compute Types:**
 * `faster-whisper` is generally faster and uses less memory than `openai-whisper`, especially on CPU.
@@ -67,6 +75,7 @@ mkdir ./output
 
 # Run the container (CPU Example)
 ```bash
+# CPU Example
 docker run -d \
   --name podcast-transcriber \
   --restart=unless-stopped \
@@ -76,30 +85,24 @@ docker run -d \
   -e PUID=99 \
   -e PGID=100 \
   -e WHISPER_MODEL="base" \
-  -e DEVICE="cpu" \
-  -e COMPUTE_TYPE="default" \
-  -e CHECK_INTERVAL_SECONDS="3600" \
-  -e LOOKBACK_DAYS="7" \
-  -e DEBUG_LOGGING="false" \
-  joshtheblack/podcast-transcriber:latest
+  -e KEEP_MP3="false" \
+  -e DISCORD_WEBHOOK_URL="" \
+ joshtheblack/podcast\-transcriber\:latest
 ```
-
-# Run the container (GPU Example - requires NVIDIA Container Toolkit)
 ```bash
- docker run -d --gpus all \
-  --name podcast-transcriber \
-  --restart=unless-stopped \
+# GPU Example \(requires NVIDIA Container Toolkit\)
+docker run -d --gpus all \
+--name podcast-transcriber \
+--restart=unless-stopped \
   -v "$(pwd)/output:/out" \
-  -e PODCAST_FEEDS="YOUR_FEED_URL_1;YOUR_FEED_URL_2" \
+  -e PODCAST_FEEDS="YOUR_FEED_URL_1" \
   -e TZ="America/New_York" \
-  -e PUID=99 \
-  -e PGID=100 \
-  -e WHISPER_MODEL="base" \
   -e DEVICE="cuda" \
   -e COMPUTE_TYPE="float16" \
-  -e CHECK_INTERVAL_SECONDS="3600" \
-  -e LOOKBACK_DAYS="7" \
-  -e DEBUG_LOGGING="false" \
+  -e PUID=99 \
+  -e PGID=100 \
+  -e KEEP_MP3="true" \
+  -e DISCORD_WEBHOOK_URL="" \
   joshtheblack/podcast-transcriber:latest
 ```
 
@@ -136,6 +139,8 @@ services:
       - CHECK_INTERVAL_SECONDS=3600
       - LOOKBACK_DAYS=7
       - DEBUG_LOGGING=false
+      - KEEP_MP3=false # Default behavior. Set to "true" to keep MP3s.
+      - DISCORD_WEBHOOK_URL= # Optional: "YOUR_DISCORD_WEBHOOK_URL"
     # Optional: GPU Deployment (requires nvidia-container-toolkit)
     # deploy:
     #   resources:

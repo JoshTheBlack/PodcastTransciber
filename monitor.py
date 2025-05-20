@@ -29,6 +29,12 @@ CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", 3600))
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", 7))
 DEBUG_LOGGING = os.getenv("DEBUG_LOGGING", "false").lower() == "true"
 
+# --- NEW: Environment variables for new features ---
+# KEEP_MP3: If 'true', MP3s are kept. Otherwise (unset or 'false'), they are deleted.
+KEEP_MP3 = os.getenv("KEEP_MP3", "false").lower() == "true"
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+# --- End New Environment variables ---
+
 # --- Output Directory Configuration ---
 OUTPUT_DIR = Path("/out")
 TRANSCRIPTS_DIR = OUTPUT_DIR / "transcripts"
@@ -47,8 +53,6 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 
 
 # --- Helper Functions ---
-# format_timestamp, sanitize_filename, load_processed_episodes, save_processed_episode, get_episode_data, download_episode
-# (These functions remain the same as the previous version)
 def sanitize_filename(filename):
     """Removes or replaces characters unsafe for filenames."""
     sanitized = re.sub(r'[\\/*?:"<>|]', "", filename)
@@ -118,7 +122,6 @@ def download_episode(url, target_path):
         except OSError as oe: logging.error(f"Error removing incomplete file {target_path}: {oe}")
     return False
 
-# --- Updated transcribe_audio using faster-whisper ---
 def transcribe_audio(model: WhisperModel, audio_path: Path, output_txt_path: Path):
     """
     Transcribes audio using faster-whisper.
@@ -127,40 +130,54 @@ def transcribe_audio(model: WhisperModel, audio_path: Path, output_txt_path: Pat
     try:
         output_txt_path.parent.mkdir(parents=True, exist_ok=True)
         logging.info(f"Starting transcription for: {audio_path}")
-
-        # --- Run Transcription (faster-whisper) ---
-        # Options documentation: https://github.com/guillaumekln/faster-whisper
-        # Consider adding VAD filter? initial_prompt? word_timestamps?
-        # beam_size=5 is default and generally good.
         segments, info = model.transcribe(str(audio_path), beam_size=5)
-
         logging.info(f"Detected language '{info.language}' with probability {info.language_probability:.2f}")
-        # info.duration is duration of audio processed (might differ slightly from file metadata)
         logging.info(f"Audio duration processed: {format_timestamp(info.duration)}")
-        # --- End Transcription ---
-
         logging.info(f"Writing transcription segments to: {output_txt_path}")
         segment_count = 0
         with open(output_txt_path, 'w', encoding='utf-8') as f:
-            # Iterate through the segments generator object
             for segment in segments:
                 start_str = format_timestamp(segment.start)
                 end_str = format_timestamp(segment.end)
-                # segment.text already has leading/trailing space removed by faster-whisper
                 f.write(f"[{start_str} --> {end_str}] {segment.text}\n")
                 segment_count += 1
-                # Optional: Log periodic progress based on segments processed (only in debug)
-                if DEBUG_LOGGING and segment_count % 20 == 0: # Log every 20 segments
+                if DEBUG_LOGGING and segment_count % 20 == 0:
                      logging.debug(f"Processed segment {segment_count} ending at {end_str}")
-
         logging.info(f"Formatted transcription with {segment_count} segments saved to {output_txt_path}")
         return True
-
     except Exception as e:
-        # Log the full traceback for transcription errors
         logging.error(f"Failed to transcribe or format {audio_path}: {e}", exc_info=True)
         return False
-# --- End transcribe_audio update ---
+
+def send_to_discord(webhook_url: str, file_path: Path, episode_title: str):
+    """
+    Attempts to send the transcript file to a Discord webhook.
+    """
+    if not webhook_url:
+        return
+    if not file_path.exists():
+        logging.error(f"Discord: Transcript file not found at {file_path}, cannot send.")
+        return
+    try:
+        file_size_mb = file_path.stat().st_size / (1024 * 1024)
+        if file_size_mb > 7.5:
+            logging.warning(f"Discord: Transcript file {file_path.name} is ~{file_size_mb:.2f}MB, sending message instead of file.")
+            message_content = f"Transcription complete for: **{episode_title}**\nTranscript file `{file_path.name}` was too large to upload directly ({file_size_mb:.2f}MB)."
+            payload = {"content": message_content}
+            response = requests.post(webhook_url, json=payload)
+        else:
+            with open(file_path, 'rb') as f:
+                payload = {"content": f"Transcription complete for: **{episode_title}**"}
+                files = {'file': (file_path.name, f, 'text/plain')}
+                response = requests.post(webhook_url, data=payload, files=files)
+        response.raise_for_status()
+        logging.info(f"Successfully sent transcript {file_path.name} to Discord.")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to send transcript {file_path.name} to Discord: {e}")
+        if e.response is not None:
+            logging.error(f"Discord response: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        logging.error(f"An unexpected error occurred while sending to Discord: {e}", exc_info=True)
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -173,36 +190,37 @@ if __name__ == "__main__":
 
     logging.info(f"Monitoring {len(podcast_urls)} feed(s): {', '.join(podcast_urls)}")
     logging.info(f"Using faster-whisper model: {WHISPER_MODEL}")
-    logging.info(f"Using device: {DEVICE}, compute_type: {COMPUTE_TYPE}") # Log new settings
+    logging.info(f"Using device: {DEVICE}, compute_type: {COMPUTE_TYPE}")
     logging.info(f"Base Output directory: {OUTPUT_DIR}")
     logging.info(f"Transcript directory: {TRANSCRIPTS_DIR}")
     logging.info(f"MP3 directory: {MP3_DIR}")
     logging.info(f"Check interval: {CHECK_INTERVAL_SECONDS} seconds")
     logging.info(f"Lookback period: {LOOKBACK_DAYS} days")
+    # --- NEW: Log new feature settings ---
+    logging.info(f"Keep MP3 after transcoding: {KEEP_MP3}") # Updated log message
+    if DISCORD_WEBHOOK_URL:
+        logging.info(f"Discord webhook URL is set. Transcripts will be sent.")
+    else:
+        logging.info(f"Discord webhook URL is NOT set. Skipping Discord notifications.")
+    # --- End Log new feature settings ---
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    MP3_DIR.mkdir(parents=True, exist_ok=True)
+    MP3_DIR.mkdir(parents=True, exist_ok=True) # Ensure MP3_DIR is created even if MP3s are deleted
     logging.info("Output directories ensured.")
 
-    # --- Load faster-whisper Model ---
     try:
         logging.info(f"Loading faster-whisper model '{WHISPER_MODEL}' (device={DEVICE}, compute_type={COMPUTE_TYPE})...")
-        # This will download/convert model on first use and cache it
-        # Adjust download_root if needed via WhisperModel argument
         whisper_model = WhisperModel(WHISPER_MODEL, device=DEVICE, compute_type=COMPUTE_TYPE)
         logging.info("Faster-whisper model loaded successfully.")
     except Exception as e:
         logging.error(f"Failed to load faster-whisper model: {e}. Exiting.", exc_info=True)
         sys.exit(1)
-    # --- End Model Loading ---
 
     processed_episodes = load_processed_episodes()
 
     while True:
         logging.info("--- Starting feed check cycle ---")
-        # ... (Feed checking and episode processing loop remains the same logic) ...
-        # It now calls the updated transcribe_audio function.
         new_episodes_processed_this_cycle = 0
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)
         logging.info(f"Processing episodes published on or after: {cutoff_date.strftime('%Y-%m-%d %H:%M:%S %Z')}")
@@ -217,44 +235,75 @@ if __name__ == "__main__":
 
                 for entry in feed.entries:
                     episode_id, mp3_url, filename_base, published_date = get_episode_data(entry)
+                    original_episode_title = entry.get('title', 'No Title')
+
                     if not episode_id or not mp3_url or not filename_base: continue
                     if published_date:
                         if published_date.tzinfo is None: published_date = published_date.replace(tzinfo=timezone.utc)
-                        if published_date < cutoff_date: logging.debug(f"Episode ID {episode_id} older. Skipping."); continue
-                    else: logging.warning(f"Episode ID {episode_id} no date. Skipping."); continue
-                    if episode_id in processed_episodes: logging.debug(f"Episode ID {episode_id} processed. Skipping."); continue
+                        if published_date < cutoff_date: logging.debug(f"Episode ID {episode_id} older than {LOOKBACK_DAYS} days. Skipping."); continue
+                    else: logging.warning(f"Episode ID {episode_id} ('{original_episode_title}') has no parsable publication date. Skipping."); continue
+                    if episode_id in processed_episodes: logging.debug(f"Episode ID {episode_id} ('{original_episode_title}') already processed. Skipping."); continue
 
-                    logging.info(f"New episode found: '{entry.get('title', 'No Title')}' (ID: {episode_id})")
+                    logging.info(f"New episode found: '{original_episode_title}' (ID: {episode_id})")
                     new_episodes_processed_this_cycle += 1
                     mp3_filename = f"{filename_base}.mp3"; txt_filename = f"{filename_base}.txt"
+                    # Download to MP3_DIR directly as _temp_ only if we might delete it.
+                    # If keeping, we can download directly to final name if not already existing.
+                    # However, using a _temp_ name is safer for incomplete downloads.
                     temp_mp3_path = MP3_DIR / f"_temp_{mp3_filename}"
                     final_mp3_path = MP3_DIR / mp3_filename
                     output_txt_path = TRANSCRIPTS_DIR / txt_filename
 
-                    if final_mp3_path.exists() or output_txt_path.exists():
-                        logging.warning(f"Output file(s) for {episode_id} exist. Marking processed.")
+                    # Check if final output already exists
+                    # If keeping MP3s, and final MP3 exists, or if transcript exists, skip.
+                    if (KEEP_MP3 and final_mp3_path.exists()) or output_txt_path.exists():
+                        logging.warning(f"Output file(s) for episode ID {episode_id} ('{original_episode_title}') already exist (MP3 kept: {KEEP_MP3}, Transcript: {output_txt_path.exists()}). Marking as processed and skipping.")
+                        if episode_id not in processed_episodes: save_processed_episode(episode_id); processed_episodes.add(episode_id)
+                        continue
+                    # If deleting MP3s, only transcript existence matters for skipping.
+                    elif (not KEEP_MP3 and output_txt_path.exists()):
+                        logging.warning(f"Transcript for episode ID {episode_id} ('{original_episode_title}') already exists and MP3s are set to be deleted. Marking as processed and skipping.")
                         if episode_id not in processed_episodes: save_processed_episode(episode_id); processed_episodes.add(episode_id)
                         continue
 
+
                     if not download_episode(mp3_url, temp_mp3_path): continue
-                    # Call the updated transcription function
-                    if not transcribe_audio(whisper_model, temp_mp3_path, output_txt_path):
-                        logging.error(f"Transcription failed for {episode_id}. Cleaning up.")
-                        try: os.remove(temp_mp3_path)
-                        except OSError as e: logging.error(f"Error removing temp file {temp_mp3_path}: {e}")
+
+                    transcription_successful = transcribe_audio(whisper_model, temp_mp3_path, output_txt_path)
+
+                    if not transcription_successful:
+                        logging.error(f"Transcription failed for episode ID {episode_id} ('{original_episode_title}'). Cleaning up temporary MP3.")
+                        try:
+                            if temp_mp3_path.exists(): os.remove(temp_mp3_path)
+                        except OSError as e: logging.error(f"Error removing temp file {temp_mp3_path} after failed transcription: {e}")
                         continue
 
-                    try:
-                        shutil.move(str(temp_mp3_path), str(final_mp3_path))
-                        logging.info(f"Renamed/Moved completed MP3 to {final_mp3_path}")
-                    except Exception as e: logging.error(f"Failed to move {temp_mp3_path} to {final_mp3_path}: {e}")
+                    # --- Handle MP3 file based on KEEP_MP3 ---
+                    if KEEP_MP3:
+                        try:
+                            shutil.move(str(temp_mp3_path), str(final_mp3_path))
+                            logging.info(f"MP3 file kept and moved to {final_mp3_path}")
+                        except Exception as e:
+                            logging.error(f"Failed to move {temp_mp3_path} to {final_mp3_path}: {e}")
+                            # If move fails, temp_mp3_path might still exist.
+                            # Consider if this should prevent marking as processed. For now, we proceed.
+                    else: # Delete MP3 (KEEP_MP3 is false)
+                        try:
+                            logging.info(f"Deleting MP3 file as per configuration: {temp_mp3_path}")
+                            os.remove(temp_mp3_path)
+                            logging.info(f"Successfully deleted MP3: {temp_mp3_path}")
+                        except OSError as e:
+                            logging.error(f"Failed to delete MP3 file {temp_mp3_path}: {e}")
+
+                    if transcription_successful and DISCORD_WEBHOOK_URL:
+                        send_to_discord(DISCORD_WEBHOOK_URL, output_txt_path, original_episode_title)
 
                     save_processed_episode(episode_id)
                     processed_episodes.add(episode_id)
-                    logging.info(f"Successfully processed and saved episode ID: {episode_id}")
+                    logging.info(f"Successfully processed and saved state for episode ID: {episode_id} ('{original_episode_title}')")
 
-            except Exception as e: logging.error(f"Failed to process feed {feed_url}: {e}", exc_info=True)
+            except Exception as e: logging.error(f"Major error processing feed {feed_url}: {e}", exc_info=True)
 
-        logging.info(f"--- Feed check cycle complete. Processed {new_episodes_processed_this_cycle} new episodes. ---")
+        logging.info(f"--- Feed check cycle complete. Processed {new_episodes_processed_this_cycle} new episodes this cycle. ---")
         logging.info(f"Sleeping for {CHECK_INTERVAL_SECONDS} seconds...")
         time_module.sleep(CHECK_INTERVAL_SECONDS)
