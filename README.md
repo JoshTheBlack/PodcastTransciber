@@ -8,6 +8,8 @@ This Docker container continuously monitors one or more podcast RSS feeds for ne
 ## Features
 
 * **Continuous Monitoring:** Runs indefinitely, checking feeds periodically.
+* **Selectable Transcription Engine:** Choose between `faster-whisper` (default, for speed and efficiency) and `openai-whisper`.
+* **Import Folder:** Prioritized processing of audio files dropped into a specified local directory.
 * **Efficient Whisper Transcription:** Utilizes `faster-whisper` for improved speed and lower memory usage.
 * **Configurable Feeds:** Monitor multiple podcast feeds.
 * **Selectable Whisper Model:** Choose model size based on accuracy/resource needs.
@@ -40,12 +42,14 @@ Configure the container using environment variables:
 | Variable                 | Description                                                                                                                                                         | Default    | Required | Example                                                           |
 | :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------- | :------- | :---------------------------------------------------------------- |
 | `PODCAST_FEEDS`          | Semicolon-separated (`;`) list of podcast RSS feed URLs.                                                                                                            | `""`       | **Yes** | `https://url1.com/feed.xml;https://url2.com/rss`                  |
+| `IMPORT_DIR`          | Path to a local directory to monitor for audio files to import and transcribe (e.g., /import). Files here are processed with priority.	|""                                                                                                            | `""`       | No (but PODCAST_FEEDS or IMPORT_DIR should be set) | `/mnt/user/import_audio`                  |
 | `TZ`                     | Set the container's timezone (use standard tz database names). Important for accurate lookback period calculations and logs.                                          | `UTC`      | No       | `America/New_York`                                                |
 | `PUID`    | Set the user ID the container runs as | `99` | No | `99`  |
 | `PGID`    | Set the user ID the container runs as | `100` | No | `100`  |
+| `TRANSCRIPTION_ENGINE`    | Transcription engine to use: faster-whisper or openai-whisper | `faster-whispe` | No | `openai-whisper`  |
 | `WHISPER_MODEL`          | The faster-whisper model to use (e.g., `tiny`, `base`, `small`, `medium`, `large-v2`, `large-v3`, `distil-large-v2`). See faster-whisper docs for more options. | `base`     | No       | `small` or `large-v3`                                             |
 | `DEVICE`                 | Device to run inference on (`cpu`, `cuda`). Using `cuda` requires host NVIDIA drivers & NVIDIA Container Toolkit setup.                                             | `cpu`      | No       | `cuda`                                                            |
-| `COMPUTE_TYPE`           | Data type/quantization for computation (e.g., `default`, `float32`, `float16`, `int8`, `int8_float16`). See faster-whisper docs for compatibility/tradeoffs.         | `default`  | No       | `float16` (GPU), `int8` (GPU/CPU)                             |
+| `COMPUTE_TYPE`           | For faster-whisper only. Data type/quantization (e.g., default, float16, int8).         | `default`  | No       | `float16` (GPU), `int8` (GPU/CPU)                             |
 | `CHECK_INTERVAL_SECONDS` | How often (in seconds) to check the feeds for new episodes.                                                                                                         | `3600`     | No       | `1800` (30 minutes)                                               |
 | `LOOKBACK_DAYS`          | How many days back to check for unprocessed episodes when starting or checking feeds.                                                                               | `7`        | No       | `14`                                                              |
 | `DEBUG_LOGGING`          | Set to `true` for detailed script DEBUG logs. Note: faster-whisper itself doesn't have verbose transcription output like openai-whisper.                           | `false`    | No       | `true`                                                            |
@@ -68,41 +72,37 @@ You **must** map a volume to `/out` inside the container to retrieve your transc
 
 ### Using `docker run`
 
-# Create a directory on your host to store the output
-```bash
-mkdir ./output
-```
-
 # Run the container (CPU Example)
 ```bash
-# CPU Example
+mkdir -p ./output ./import_folder # Create host directories
+
+# Example: Podcasts and Import Folder, faster-whisper (default)
 docker run -d \
   --name podcast-transcriber \
   --restart=unless-stopped \
-  -v "$(pwd)/output:/out" \
-  -e PODCAST_FEEDS="YOUR_FEED_URL_1;YOUR_FEED_URL_2" \
+  -v "{pwd}\output\:/out" \
+  -v "{pwd}\import:/import" \
+  -e PODCAST_FEEDS="YOUR_FEED_URL_1" \
+  -e IMPORT_DIR="/import" \
   -e TZ="America/New_York" \
-  -e PUID=99 \
-  -e PGID=100 \
+  -e PUID=1000 \
+  -e PGID=1000 \
   -e WHISPER_MODEL="base" \
   -e KEEP_MP3="false" \
-  -e DISCORD_WEBHOOK_URL="" \
- joshtheblack/podcast\-transcriber\:latest
-```
-```bash
-# GPU Example \(requires NVIDIA Container Toolkit\)
+  -e DISCORD_WEBHOOK_URL="YOUR_DISCORD_WEBHOOK_URL" \
+  joshtheblack/podcast-transcriber:latest
+
+# Example: Import Folder Only, openai-whisper, GPU
 docker run -d --gpus all \
---name podcast-transcriber \
---restart=unless-stopped \
-  -v "$(pwd)/output:/out" \
-  -e PODCAST_FEEDS="YOUR_FEED_URL_1" \
-  -e TZ="America/New_York" \
+  --name podcast-transcriber-importer \
+  --restart=unless-stopped \
+  -v "<span class="math-inline">\(pwd\)/output\:/out" \
+  -v "</span>(pwd)/import_folder:/import" \
+  -e IMPORT_DIR="/import" \
+  -e TRANSCRIPTION_ENGINE="openai-whisper" \
+  -e WHISPER_MODEL="medium" \
   -e DEVICE="cuda" \
-  -e COMPUTE_TYPE="float16" \
-  -e PUID=99 \
-  -e PGID=100 \
-  -e KEEP_MP3="true" \
-  -e DISCORD_WEBHOOK_URL="" \
+  -e TZ="America/New_York" \
   joshtheblack/podcast-transcriber:latest
 ```
 
@@ -123,24 +123,27 @@ services:
     container_name: podcast-transcriber
     restart: unless-stopped
     volumes:
-      # Map a local directory './output' to the container's /out directory
-      - ./output:/out
+      - ./output:/out            # For transcripts, state, kept MP3s
+      - ./import_folder:/import  # For audio files to import
     environment:
       # --- Required ---
-      - PODCAST_FEEDS=YOUR_FEED_URL_1;YOUR_FEED_URL_2
-      # --- Recommended ---
+      - PODCAST_FEEDS=YOUR_FEED_URL_1;YOUR_FEED_URL_2 # Optional
+      - IMPORT_DIR=/import                           # Optional
+      # --- General Settings ---
       - TZ=America/New_York
-      - PUID=99
-      - PGID=100
-      # --- Optional ---
+      - PUID=99 # Your user's PUID
+      - PGID=100 # Your user's PGID
+      - DEBUG_LOGGING=false
+      - DISCORD_WEBHOOK_URL= # Optional
+      # --- Transcription Engine Settings ---
+      - TRANSCRIPTION_ENGINE=faster-whisper # or "openai-whisper"
       - WHISPER_MODEL=base
-      - DEVICE=cpu         # Change to "cuda" for GPU
-      - COMPUTE_TYPE=default # Change for optimization (e.g., "float16", "int8")
+      - DEVICE=cpu                        # or "cuda" for GPU
+      - COMPUTE_TYPE=default              # Only for faster-whisper
+      # --- Podcast Specific Settings ---
       - CHECK_INTERVAL_SECONDS=3600
       - LOOKBACK_DAYS=7
-      - DEBUG_LOGGING=false
-      - KEEP_MP3=false # Default behavior. Set to "true" to keep MP3s.
-      - DISCORD_WEBHOOK_URL= # Optional: "YOUR_DISCORD_WEBHOOK_URL"
+      - KEEP_MP3=false                    # For podcast MP3s
     # Optional: GPU Deployment (requires nvidia-container-toolkit)
     # deploy:
     #   resources:
@@ -218,4 +221,9 @@ Files will be saved within the directory you mapped to `/out` on your host syste
       └── episode_title_1.txt
       └── episode_title_2.txt
       └── ...
+
+<your_host_import_directory>/   # Mapped to /import (e.g., /import_folder)
+  ├── audiofile_to_process.mp3  # Drop files here
+  └── another_audio.wav
+  └── .processing_tmp/          # Internal temporary folder, do not manually add files here
 ```

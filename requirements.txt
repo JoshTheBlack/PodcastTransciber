@@ -3,3 +3,4 @@ faster-whisper
 feedparser
 requests
 hf_xet
+openai-whisper

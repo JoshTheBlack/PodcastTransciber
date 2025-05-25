@@ -1,0 +1,35 @@
+# Ignore local output and import directories
+/output/
+/import/
+
+# Python specific ignores
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+pip-freeze.txt
+pip-requirements.txt # If you generate this for a venv but don't want to commit it
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Docker related (if you build locally and have untracked docker files/context)
+.dockerignore 
+# You might already have a .dockerignore for controlling Docker build context.
+# This line in .gitignore would ignore the .dockerignore file itself if you don't want to commit it,
+# though typically .dockerignore IS committed.
+
+# Local logs if any are generated outside /out
+*.log
