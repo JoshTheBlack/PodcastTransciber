@@ -1,6 +1,7 @@
 # Ignore local output and import directories
 /output/
 /import/
+/models/
 
 # Python specific ignores
 __pycache__/
