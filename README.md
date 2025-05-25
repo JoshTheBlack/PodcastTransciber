@@ -69,6 +69,9 @@ Configure the container using environment variables:
 ## Usage Examples
 
 You **must** map a volume to `/out` inside the container to retrieve your transcriptions and audio files, and to persist the state file (`.processed_episodes.log`) between container restarts.
+You **must** map a volume to `/data_persistent` inside the container for the python venv and transcription models to be installed and survive a container refresh.
+You **may** map a volume to `/import` to enable transcription of non-feed audio files.
+First run, and any subsequent run where the transcription engine and models change will take a while to download and install dependencies/models.
 
 ### Using `docker run`
 
@@ -80,8 +83,9 @@ mkdir -p ./output ./import_folder # Create host directories
 docker run -d \
   --name podcast-transcriber \
   --restart=unless-stopped \
-  -v "{pwd}\output\:/out" \
-  -v "{pwd}\import:/import" \
+  -v "${pwd}/output\:/out" \
+  -v "${pwd}/import_folder:/import" \
+  -v "${pwd}/models:/data_persistent" \
   -e PODCAST_FEEDS="YOUR_FEED_URL_1" \
   -e IMPORT_DIR="/import" \
   -e TZ="America/New_York" \
@@ -96,8 +100,9 @@ docker run -d \
 docker run -d --gpus all \
   --name podcast-transcriber-importer \
   --restart=unless-stopped \
-  -v "<span class="math-inline">\(pwd\)/output\:/out" \
-  -v "</span>(pwd)/import_folder:/import" \
+  -v "${pwd}/output\:/out" \
+  -v "${pwd}/import_folder:/import" \
+  -v "${pwd}/models:/data_persistent" \
   -e IMPORT_DIR="/import" \
   -e TRANSCRIPTION_ENGINE="openai-whisper" \
   -e WHISPER_MODEL="medium" \
@@ -125,6 +130,7 @@ services:
     volumes:
       - ./output:/out            # For transcripts, state, kept MP3s
       - ./import_folder:/import  # For audio files to import
+      - ./models:/data_persistent # For python venv and transcription models
     environment:
       # --- Required ---
       - PODCAST_FEEDS=YOUR_FEED_URL_1;YOUR_FEED_URL_2 # Optional
@@ -185,6 +191,18 @@ Unraid uses Docker through its web UI.
     * **Name:** `Output Files` (or similar)
     * **Container Path:** `/out`
     * **Host Path:** Choose a path on your Unraid server where you want the transcripts and MP3s stored. Example: `/mnt/user/appdata/podcast-transcriber/output/` (Make sure the `appdata/podcast-transcriber` part exists or adjust as needed).
+    * **Access Mode:** `Read/Write`    
+    * Click "Add another Path, Port, Variable, Label or Device".
+    * **Config Type:** `Path`
+    * **Name:** `Persistent Data` (or similar)
+    * **Container Path:** `/data_persistent`
+    * **Host Path:** Choose a path on your Unraid server where you want the transcription models stored. Example: `/mnt/user/appdata/podcast-transcriber/models/` (Make sure the `appdata/podcast-transcriber` part exists or adjust as needed).
+    * **Access Mode:** `Read/Write`
+        * Click "Add another Path, Port, Variable, Label or Device".
+    * **Config Type:** `Path`
+    * **Name:** `Import` (or similar)
+    * **Container Path:** `/import`
+    * **Host Path:** Choose a path on your Unraid server where you want to drop audio files for transcription. Example: `/mnt/user/appdata/podcast-transcriber/import/` (Make sure the `appdata/podcast-transcriber` part exists or adjust as needed).
     * **Access Mode:** `Read/Write`
 5.  **Add Environment Variables:**
     * Click "Add another Path, Port, Variable, Label or Device" repeatedly for each variable you need to set.
@@ -196,9 +214,10 @@ Unraid uses Docker through its web UI.
         * **Name:** `User ID`  | **Key:** `PUID`    | **Value** `99`
         * **Name:** `Group ID`  | **Key:** `PGID`    | **Value** `100`
     * **Optional:**
+        * **Name:** `Transcription Engine` | **Key:** `TRANSCRIPTION_ENGINE` | **Value:** `faster-whisper` (or `openai-whisper`)
         * **Name:** `Whisper Model` | **Key:** `WHISPER_MODEL` | **Value:** `base` (or `small`, `medium`, `large-v3`...)
         * **Name:** `Device` | **Key:** `DEVICE` | **Value:** `cpu` (or `cuda` if GPU configured on host)
-        * **Name:** `Compute Type` | **Key:** `COMPUTE_TYPE` | **Value:** `default` (or `float16`, `int8`...)
+        * **Name:** `Compute Type` | **Key:** `COMPUTE_TYPE` | **Value:** `default` (or `float16`, `int8`... only works with faster-whisper)
         * **Name:** `Check Interval` | **Key:** `CHECK_INTERVAL_SECONDS` | **Value:** `3600`
         * **Name:** `Lookback Days` | **Key:** `LOOKBACK_DAYS` | **Value:** `7`
         * **Name:** `Debug Logging` | **Key:** `DEBUG_LOGGING` | **Value:** `false` (or `true`)
